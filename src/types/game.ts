@@ -1,0 +1,15 @@
+export type Position = { x: number; y: number };
+export type Role = { id: string; name: string; description?: string };
+export type Player = { id: string; name: string; color: string; handEnabled: boolean; scoreEnabled: boolean; roleEnabled: boolean; hand: string[]; score: number; role?: Role };
+export type Card = { id: string; suit: string; value: string | number; name?: string; description?: string };
+export type Deck = { id: string; name: string; cardIds: string[] };
+export type Die = { id: string; sides: number; value: number };
+export type Token = { id: string; color: string; value: number };
+export type Pawn = { id: string; color: string; ownerPlayerId?: string };
+export type Point = { x: number; y: number };
+export type Board = { id: string; name: string; width: number; height: number; backgroundColor: string; gridSize: number; gridEnabled: boolean; snapEnabled: boolean };
+export type BoardShape = { id: string; boardId: string; shapeType: 'rectangle'|'roundedRectangle'|'circle'; position: Point; width: number; height: number; fillColor: string; strokeColor: string; strokeWidth: number; label?: string; note?: string; isSpace: boolean; zIndex: number };
+export type BoardLine = { id: string; boardId: string; start: Point; end: Point; strokeWidth: number; lineStyle: 'solid'|'dashed'; arrow: 'none'|'end'; zIndex: number };
+export type TableObject = { id: string; type: 'card' | 'deck' | 'die' | 'token' | 'pawn'; refId: string; position: Position; zIndex: number; faceDown?: boolean };
+export type CardLocation = { type: 'deck'; deckId: string } | { type: 'hand'; playerId: string } | { type: 'table'; objectId: string } | { type: 'unplaced' };
+export type GameState = { players: Player[]; cards: Card[]; decks: Deck[]; dice: Die[]; tokens: Token[]; pawns: Pawn[]; tableObjects: TableObject[]; boards: Board[]; boardShapes: BoardShape[]; boardLines: BoardLine[]; editorMode: 'play'|'board'; pawnLocations: Record<string,{boardId:string;spaceId?:string;position:Point}>; cardLocations: Record<string, CardLocation>; activePlayerId?: string; nextZ: number };
