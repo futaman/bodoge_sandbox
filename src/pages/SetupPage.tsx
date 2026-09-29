@@ -8,7 +8,7 @@ import { id } from '../utils/id';
 
 const colors=['#d64b4b','#397bd8','#e3a52b','#4ca66b','#8556b8'];
 
-export function SetupPage({state,dispatch,onStart}:{state:GameState;dispatch:Dispatch<Action>;onStart:()=>void}){
+export function SetupPage({state,dispatch,onStart,online=false,currentPlayerId}:{state:GameState;dispatch:Dispatch<Action>;onStart:()=>void;online?:boolean;currentPlayerId?:string}){
  const [suits,setSuits]=useState(['赤','青']);
  const [values,setValues]=useState(['1','2','3']);
  const [copies,setCopies]=useState(1);
@@ -21,7 +21,7 @@ export function SetupPage({state,dispatch,onStart}:{state:GameState;dispatch:Dis
  const addPlayer=()=>{const player:Player={id:id('player'),name:`プレイヤー ${state.players.length+1}`,color:colors[state.players.length%colors.length],handEnabled:true,scoreEnabled:true,roleEnabled:false,hand:[],score:0};dispatch({type:'addPlayer',player})};
  const update=(player:Player,changes:Partial<Player>)=>dispatch({type:'updatePlayer',id:player.id,changes});
  const applySetup=(data:SetupSampleData)=>{
-  dispatch({type:'importSetup',players:data.players,cards:data.cards});
+  dispatch({type:'importSetup',players:online?state.players:data.players,cards:data.cards});
   setSuits([...new Set(data.cards.map(card=>card.suit))]);
   setValues([...new Set(data.cards.map(card=>String(card.value)))]);
  };
@@ -49,7 +49,7 @@ export function SetupPage({state,dispatch,onStart}:{state:GameState;dispatch:Dis
   </section>
 
   <section className="setup-grid">
-   <article><h2>プレイヤー</h2>{state.players.map(player=><div className="player-edit" key={player.id}><input type="color" value={player.color} onChange={event=>update(player,{color:event.target.value})}/><input value={player.name} onChange={event=>update(player,{name:event.target.value})}/><button onClick={()=>dispatch({type:'deletePlayer',id:player.id})}>削除</button><div className="toggles">{(['handEnabled','scoreEnabled','roleEnabled'] as const).map(key=><label key={key}><input type="checkbox" checked={player[key]} onChange={event=>update(player,{[key]:event.target.checked})}/>{key==='handEnabled'?'手札':key==='scoreEnabled'?'得点':'役職'}</label>)}</div></div>)}<button className="secondary" onClick={addPlayer}>＋ プレイヤー追加</button></article>
+   <article><h2>プレイヤー</h2>{online&&<p className="muted">参加者はルームへ接続すると自動で追加されます。自分の設定だけ変更できます。</p>}{state.players.map(player=>{const editable=!online||player.id===currentPlayerId;return <div className="player-edit" key={player.id}><input disabled={!editable} type="color" value={player.color} onChange={event=>update(player,{color:event.target.value})}/><input disabled={!editable} value={player.name} onChange={event=>update(player,{name:event.target.value})}/>{!online&&<button onClick={()=>dispatch({type:'deletePlayer',id:player.id})}>削除</button>}<div className="toggles">{(['handEnabled','scoreEnabled','roleEnabled'] as const).map(key=><label key={key}><input disabled={!editable} type="checkbox" checked={player[key]} onChange={event=>update(player,{[key]:event.target.checked})}/>{key==='handEnabled'?'手札':key==='scoreEnabled'?'得点':'役職'}</label>)}</div></div>})}{!online&&<button className="secondary" onClick={addPlayer}>＋ プレイヤー追加</button>}</article>
    <article><h2>カードセット作成</h2>{field(suits,setSuits,'Suit')}{field(values,setValues,'Value')}<label>各カードの枚数<input type="number" min="1" value={copies} onChange={event=>setCopies(Math.max(1,Number(event.target.value)))}/></label><button className="primary" onClick={()=>dispatch({type:'createCards',suits,values,copies})}>カードを生成</button><p className="muted">現在 {state.cards.length} 枚のカード</p></article>
    <article><h2>山札</h2><p>生成済みのカードをひとつの山札にまとめて、試遊中にシャッフル・ドローできます。</p><button className="secondary" disabled={!state.cards.length} onClick={()=>dispatch({type:'createDeck',name:`山札 ${state.decks.length+1}`,cardIds:state.cards.filter(card=>state.cardLocations[card.id]?.type==='unplaced').map(card=>card.id),position:{x:80,y:100}})}>未配置カードで山札を作成</button><p className="muted">{state.decks.length} 個の山札</p></article>
   </section>

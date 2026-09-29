@@ -1,0 +1,5 @@
+import type { ConnectionStatus, RoomPlayer } from '../../shared/protocol';
+export function OnlineRoomBar({roomId,status,players,onLeave}:{roomId:string;status:ConnectionStatus;players:RoomPlayer[];onLeave:()=>void}){
+ const invite=`${location.origin}${`${import.meta.env.BASE_URL}room/${roomId}`.replace(/\/+/g,'/')}`;const copy=async()=>{await navigator.clipboard.writeText(invite);alert('招待URLをコピーしました。')};
+ return <aside className="online-room-bar"><div><span className={`connection-dot ${status}`}/><strong>{status==='online'?'接続中':status==='reconnecting'?'再接続中…':'オフライン'}</strong></div><button className="room-code" onClick={copy} title="クリックして招待URLをコピー">ROOM {roomId}　⧉</button><div className="presence-list">{players.map(player=><span key={player.playerId} title={`${player.playerName}：${player.connectionStatus}`}><i style={{background:player.color}}/>{player.playerName}{player.connectionStatus!=='online'&&'（離席）'}</span>)}</div><button className="leave-room" onClick={onLeave}>退出</button></aside>;
+}

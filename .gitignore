@@ -1,7 +1,11 @@
 node_modules/
 dist/
+dist-server/
+.tmp-server/
+.tmp-multiplayer-server.mjs
 .vite/
 *.local
 *.log
+multiplayer/data/
 .DS_Store
 Thumbs.db
