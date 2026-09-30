@@ -6,6 +6,7 @@ import { createActionId } from '../../shared/protocol';
 
 type JoinIntent={roomId?:string;playerName:string;resumeToken?:string};
 type DragState={actionId:string;lastSent:number;position:Position;snap?:boolean;timer?:number};
+const DRAG_BROADCAST_INTERVAL_MS=50;
 
 const socketUrl=()=>import.meta.env.VITE_MULTIPLAYER_URL||`${location.protocol==='https:'?'wss':'ws'}://${location.hostname}:8787`;
 const roomPath=(roomId:string)=>`${import.meta.env.BASE_URL}room/${roomId}`.replace(/\/+/g,'/');
@@ -40,7 +41,7 @@ export function useRoomConnection(){
   if(!roomId||!playerId)return;
   if(action.type==='moveObject'){
    const now=performance.now();let drag=dragRef.current.get(action.id);if(!drag){drag={actionId:createActionId(),lastSent:0,position:action.position,snap:action.snap};dragRef.current.set(action.id,drag);send({type:'DRAG_START',actionId:drag.actionId,targetId:action.id})}
-   drag.position=action.position;drag.snap=action.snap;if(now-drag.lastSent>=40){send({type:'DRAG_MOVE',actionId:drag.actionId,targetId:action.id,position:drag.position,snap:drag.snap});drag.lastSent=now}
+   drag.position=action.position;drag.snap=action.snap;if(now-drag.lastSent>=DRAG_BROADCAST_INTERVAL_MS){send({type:'DRAG_MOVE',actionId:drag.actionId,targetId:action.id,position:drag.position,snap:drag.snap});drag.lastSent=now}
    clearTimeout(drag.timer);drag.timer=window.setTimeout(()=>{const final=dragRef.current.get(action.id);if(!final)return;send({type:'DRAG_END',actionId:final.actionId,targetId:action.id,position:final.position,snap:final.snap});dragRef.current.delete(action.id)},100);return;
   }
   const targetId='id' in action&&typeof action.id==='string'?action.id:'deckId' in action?String(action.deckId):'cardId' in action?String(action.cardId):undefined;
