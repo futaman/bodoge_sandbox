@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: bodoge-sandbox-ws
+    runtime: node
+    region: singapore
+    plan: free
+    numInstances: 1
+    buildCommand: npm ci && npm run typecheck && npm run build:server
+    startCommand: npm run server
+    healthCheckPath: /health
+    autoDeploy: true
+    maxShutdownDelaySeconds: 30
+    envVars:
+      - key: NODE_VERSION
+        value: 22.18.0
+      - key: NODE_ENV
+        value: production
+      - key: ALLOWED_ORIGINS
+        value: https://futaman.github.io

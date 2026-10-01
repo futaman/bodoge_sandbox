@@ -111,6 +111,21 @@ npm run server
 
 インターネットへ公開する場合、GitHub Pagesとは別にWebSocketサーバーをNode.js対応サービスへデプロイし、ビルド時の `VITE_MULTIPLAYER_URL` にその `wss://` URLを設定してください。設定例は [`.env.example`](.env.example) にあります。
 
+## オンラインサーバーを公開する
+
+リポジトリ直下の [`render.yaml`](render.yaml) は、RenderのWeb Serviceとしてマルチプレイヤーサーバーを作成する設定です。
+
+1. この変更をGitHubへpushします。
+2. Renderで「New → Blueprint」を選び、このリポジトリを接続します。
+3. `render.yaml` を使ってサービスを作成します。
+4. 発行されたURLへ `/ws` を付けた値（例: `wss://bodoge-sandbox-ws.onrender.com/ws`）を控えます。
+5. GitHubリポジトリの「Settings → Secrets and variables → Actions → Variables」で、`VITE_MULTIPLAYER_URL` にその値を登録します。
+6. GitHub Pagesのワークフローを再実行します。
+
+サーバーは `GET /health` でヘルスチェックでき、WebSocket接続は `/ws` で待ち受けます。公開環境では `ALLOWED_ORIGINS` に指定したWebサイト以外からの接続を拒否します。
+
+現在のルーム保存先はローカルファイルです。RenderのFree Web Serviceは再起動時にローカルファイルが保持されないため、試遊・検証用途を超えて利用する場合は永続ディスクまたは外部データベースへ移行してください。ルーム状態をメモリで管理しているため、現段階ではサーバーを1インスタンスで動かします。
+
 同じLAN内のスマートフォンなどから確認する場合は、次のように起動します。
 
 ```bash
@@ -135,6 +150,7 @@ npm run preview
 - ローカルモードの試遊状態はブラウザを再読み込みするとリセットされます。オンラインルームはサーバー側に一時保存されます。
 - JSONへ出力できるのは、現在のところプレイヤー設定とカード設定です。
 - GitHub PagesだけではWebSocketサーバーを動かせないため、オンライン公開には別途サーバーのデプロイが必要です。
+- 無料サーバーの再起動やスリープをまたぐルーム復元には、外部データベースまたは永続ディスクが必要です。
 
 ## 技術構成
 

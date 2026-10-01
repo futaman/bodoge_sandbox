@@ -8,7 +8,7 @@ type JoinIntent={roomId?:string;playerName:string;resumeToken?:string};
 type DragState={actionId:string;lastSent:number;position:Position;snap?:boolean;timer?:number};
 const DRAG_BROADCAST_INTERVAL_MS=50;
 
-const socketUrl=()=>import.meta.env.VITE_MULTIPLAYER_URL||`${location.protocol==='https:'?'wss':'ws'}://${location.hostname}:8787`;
+const socketUrl=()=>{const configured=String(import.meta.env.VITE_MULTIPLAYER_URL??'').trim();return configured?(configured.endsWith('/ws')?configured:`${configured.replace(/\/$/,'')}/ws`):`${location.protocol==='https:'?'wss':'ws'}://${location.hostname}:8787/ws`};
 const roomPath=(roomId:string)=>`${import.meta.env.BASE_URL}room/${roomId}`.replace(/\/+/g,'/');
 const tokenKey=(roomId:string)=>`boardgame-room-token:${roomId}`;
 
