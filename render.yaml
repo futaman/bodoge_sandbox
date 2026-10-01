@@ -9,7 +9,6 @@ services:
     startCommand: npm run server
     healthCheckPath: /health
     autoDeploy: true
-    maxShutdownDelaySeconds: 30
     envVars:
       - key: NODE_VERSION
         value: 22.18.0
