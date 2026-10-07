@@ -1,7 +1,7 @@
 export type Position={x:number;y:number};
 export type Role={id:string;name:string;description?:string};
 export type Visibility='public'|'owner'|'hidden';
-export type Player={id:string;name:string;color:string;handEnabled:boolean;scoreEnabled:boolean;roleEnabled:boolean;hand:string[];score:number;role?:Role};
+export type Player={id:string;name:string;color:string;handEnabled:boolean;scoreEnabled:boolean;roleEnabled:boolean;hand:string[];revealedHandCardIds?:string[];score:number;role?:Role};
 export type Card={id:string;suit:string;value:string|number;name?:string;description?:string;visibility?:Visibility;ownerId?:string};
 export type Deck={id:string;name:string;cardIds:string[];backImage?:string};
 export type Die={id:string;sides:number;value:number;lastRolledBy?:string};

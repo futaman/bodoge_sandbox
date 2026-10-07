@@ -9,7 +9,7 @@ import type { ActionLogEntry, ClientMessage, PublicRoomSnapshot, RoomPlayer, Ser
 const PORT=Number(process.env.PORT??8787);
 const ROOM_TTL_MS=6*60*60*1000;
 const LOCK_TTL_MS=10_000;
-const DRAG_BROADCAST_INTERVAL_MS=50;
+const DRAG_BROADCAST_INTERVAL_MS=40;
 const HEARTBEAT_INTERVAL_MS=30_000;
 const RATE_WINDOW_MS=10_000;
 const MAX_MESSAGES_PER_WINDOW=400;
@@ -39,7 +39,7 @@ let shuttingDown=false;
 
 const ALLOWED_ACTION_TYPES=new Set<Action['type']>([
  'setEditorMode','createBoard','updateBoard','createShape','moveShape','updateShape','deleteShape','duplicateShape','generateSpaces','createLine','moveLine','deleteLine',
- 'addPlayer','updatePlayer','deletePlayer','exchangeCards','importSetup','createCards','addCards','updateCard','deleteCard','deleteCards','createDeck','deleteDeck','shuffleDeck','drawCard','drawCardToTable','dealCards','dealEvenly','returnToDeck','moveCardToTable','moveCardToHand','moveObject','flipTableCard','selectPlayer','addDie','rollDie','addToken','updateToken','deleteToken','addPawn','updatePawn','deletePawn','changeScore',
+ 'addPlayer','updatePlayer','deletePlayer','exchangeCards','importSetup','createCards','addCards','updateCard','deleteCard','deleteCards','createDeck','deleteDeck','shuffleDeck','drawCard','drawCardToTable','dealCards','dealEvenly','returnToDeck','moveCardToTable','moveCardToHand','setHandCardsRevealed','moveObject','flipTableCard','selectPlayer','addDie','rollDie','addToken','updateToken','deleteToken','addPawn','updatePawn','deletePawn','changeScore',
 ]);
 
 const defaultState=():GameState=>({players:[],cards:[],decks:[],dice:[],tokens:[],pawns:[],tableObjects:[],boards:[{id:crypto.randomUUID(),name:'ボード 1',width:2700,height:1800,backgroundColor:'#4f8567',gridSize:10,gridEnabled:true,snapEnabled:true}],boardShapes:[],boardLines:[],editorMode:'play',pawnLocations:{},cardLocations:{},nextZ:1});
@@ -63,6 +63,7 @@ function actionWithinLimits(action:Action){
  if(action.type==='importSetup')return action.cards.length<=MAX_CARDS_PER_ROOM;
  if(action.type==='generateSpaces')return action.count>0&&action.count<=500;
  if(action.type==='dealCards'||action.type==='dealEvenly')return action.count>0&&action.count<=500;
+ if(action.type==='setHandCardsRevealed')return action.cardIds.length<=MAX_CARDS_PER_ROOM;
  return true;
 }
 function rateLimited(session:Session,isAction:boolean){
@@ -81,6 +82,7 @@ function visibleState(room:Room,viewerId:string):GameState{
   visibleCards.set(card.id,canSee?card:{id:card.id,suit:'',value:''});
  }
  for(const cardId of ownHand){const card=room.state.cards.find(candidate=>candidate.id===cardId);if(card)visibleCards.set(card.id,card)}
+ for(const player of room.state.players)for(const cardId of player.revealedHandCardIds??[]){const card=room.state.cards.find(candidate=>candidate.id===cardId);if(card)visibleCards.set(card.id,card)}
  const deckCardIds=new Set(room.state.decks.flatMap(deck=>deck.cardIds));
  for(const card of room.state.cards)if(room.state.cardLocations[card.id]?.type==='unplaced')visibleCards.set(card.id,card);
  const cardLocations=Object.fromEntries(Object.entries(room.state.cardLocations).filter(([id,location])=>visibleCards.has(id)&&!deckCardIds.has(id)&&!(location.type==='hand'&&location.playerId!==viewerId)));
@@ -90,7 +92,7 @@ function visibleState(room:Room,viewerId:string):GameState{
   decks:room.state.decks.map(deck=>({...deck,cardIds:Array.from({length:deck.cardIds.length},(_,index)=>`hidden-${deck.id}-${index}`)})),
   players:room.state.players.map(player=>player.id===viewerId?structuredClone(player):{
    ...player,
-   hand:Array.from({length:player.hand.length},(_,index)=>`hidden-hand-${player.id}-${index}`),
+   hand:player.hand.map((cardId,index)=>player.revealedHandCardIds?.includes(cardId)?cardId:`hidden-hand-${player.id}-${index}`),
    role:undefined,
   }),
   cardLocations,
@@ -123,26 +125,26 @@ function scheduleSave(){if(saveTimer)return;saveTimer=setTimeout(()=>{saveTimer=
 function persist(){try{mkdirSync(dirname(SAVE_FILE),{recursive:true});const temp=`${SAVE_FILE}.tmp`;writeFileSync(temp,JSON.stringify([...rooms.values()],null,2));renameSync(temp,SAVE_FILE)}catch(error){console.error('Failed to persist rooms',error)}}
 function restore(){try{const stored=JSON.parse(readFileSync(SAVE_FILE,'utf8')) as unknown;if(!Array.isArray(stored))return;for(const candidate of stored){const room=candidate as Room;if(room?.roomId&&room.state&&Array.isArray(room.players)&&Date.now()-room.updatedAt<ROOM_TTL_MS&&stateWithinLimits(room.state)){room.players=room.players.map(player=>({...player,connectionStatus:'offline'}));room.locks={};rooms.set(room.roomId,room)}}}catch{/* First run or invalid snapshot: start empty. */}}
 
-function addConnection(room:Room,player:StoredPlayer,socket:WebSocket,session:Session){
+function addConnection(room:Room,player:StoredPlayer,socket:WebSocket,session:Session,created=false){
  session.roomId=room.roomId;session.playerId=player.playerId;
  player.connectionStatus='online';player.lastSeenAt=Date.now();
  const roomSockets=sockets.get(room.roomId)??new Map<string,WebSocket>();roomSockets.get(player.playerId)?.close(4001,'Reconnected elsewhere');roomSockets.set(player.playerId,socket);sockets.set(room.roomId,roomSockets);
- send(socket,{type:'ROOM_JOINED',roomId:room.roomId,playerId:player.playerId,resumeToken:player.resumeToken});touch(room);
+ send(socket,{type:created?'ROOM_CREATED':'ROOM_JOINED',roomId:room.roomId,playerId:player.playerId,resumeToken:player.resumeToken});touch(room);
 }
 
-function join(room:Room,name:string,resumeToken:string|undefined,socket:WebSocket,session:Session){
+function join(room:Room,name:string,resumeToken:string|undefined,socket:WebSocket,session:Session,created=false){
  let player=resumeToken?room.players.find(candidate=>candidate.resumeToken===resumeToken):undefined;
  if(!player&&room.players.length>=MAX_PLAYERS_PER_ROOM){send(socket,{type:'ERROR',message:'このルームは参加人数の上限に達しています。'});return}
  if(!player){const playerId=crypto.randomUUID();const playerName=safePlayerName(name)||`Player ${room.players.length+1}`;player={playerId,playerName,color:PLAYER_COLORS[room.players.length%PLAYER_COLORS.length],connectionStatus:'online',joinedAt:Date.now(),lastSeenAt:Date.now(),resumeToken:crypto.randomUUID()};room.players.push(player);room.state.players.push(gamePlayer(player.playerId,player.playerName,room.players.length-1));room.state.activePlayerId??=player.playerId}
  else{const resumedPlayer=player;resumedPlayer.playerName=safePlayerName(name)||resumedPlayer.playerName;const existing=room.state.players.find(candidate=>candidate.id===resumedPlayer.playerId);if(existing)existing.name=resumedPlayer.playerName}
- addConnection(room,player,socket,session);
+ addConnection(room,player,socket,session,created);
 }
 
 function handleMessage(socket:WebSocket,session:Session,message:ClientMessage){
  if(message.type==='ROOM_CREATE'){
   if(session.roomId){send(socket,{type:'ERROR',message:'すでにルームへ参加しています。'});return}
   if(rooms.size>=MAX_ROOMS){send(socket,{type:'ERROR',message:'現在ルームを作成できません。時間をおいて再試行してください。'});return}
-  const id=uniqueRoomId();const room:Room={roomId:id,version:0,state:defaultState(),players:[],locks:{},actionLog:[],updatedAt:Date.now()};rooms.set(id,room);join(room,message.playerName,message.resumeToken,socket,session);send(socket,{type:'ROOM_CREATED',roomId:id,playerId:session.playerId!,resumeToken:room.players[0].resumeToken});return;
+  const id=uniqueRoomId();const room:Room={roomId:id,version:0,state:defaultState(),players:[],locks:{},actionLog:[],updatedAt:Date.now()};rooms.set(id,room);join(room,message.playerName,message.resumeToken,socket,session,true);return;
  }
  if(message.type==='ROOM_JOIN'){
   if(session.roomId){send(socket,{type:'ERROR',message:'すでにルームへ参加しています。'});return}
@@ -170,6 +172,10 @@ function handleMessage(socket:WebSocket,session:Session,message:ClientMessage){
   if(!ALLOWED_ACTION_TYPES.has(action.type)){send(socket,{type:'ACTION_REJECTED',actionId:message.action.actionId,reason:'許可されていないActionです。'});return}
   if(!actionWithinLimits(action)){send(socket,{type:'ACTION_REJECTED',actionId:message.action.actionId,reason:'一度に操作できる上限を超えています。'});return}
   if(action.type==='addPlayer'||action.type==='deletePlayer'){send(socket,{type:'ACTION_REJECTED',actionId:message.action.actionId,reason:'オンラインでは参加者が自動的にプレイヤーへ追加されます。'});return}
+  // Online actions always target the connected player. The selected player is a local UI concern.
+  if(action.type==='selectPlayer'){return}
+  if(action.type==='drawCard'||action.type==='dealCards')action={...action,playerId:session.playerId};
+  if(action.type==='setHandCardsRevealed')action={...action,playerId:session.playerId};
   if(action.type==='updatePlayer'&&action.id!==session.playerId){send(socket,{type:'ACTION_REJECTED',actionId:message.action.actionId,reason:'変更できるのは自分のプレイヤー設定だけです。'});return}
   if(action.type==='importSetup')action={...action,players:room.state.players};
   const nextState=reducer(room.state,action);if(!stateWithinLimits(nextState)){send(socket,{type:'ACTION_REJECTED',actionId:message.action.actionId,reason:'ルームの上限を超えるため操作できません。'});return}room.state=nextState;
